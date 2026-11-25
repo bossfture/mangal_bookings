@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Бронирование мангала</title>
-    <!-- Подключаем SDK Telegram WebApp -->
+    <title>Бронирование мангала (MAX)</title>
+    <!-- ПОДКЛЮЧЕНИЕ SDK ТОЛЬКО ДЛЯ MAX -->
     <script src="https://st.max.ru/js/max-web-app.js"></script>
     <style>
       :root { color-scheme: dark; }
@@ -50,7 +50,7 @@
         display: flex; align-items: center; justify-content: center;
         font-size: 16px; font-weight: 600;
         border: 1.5px solid transparent;
-        color: #bdbdbd; /* Цвет по умолчанию */
+        color: #bdbdbd;
       }
       
       /* Стили для активных дней */
@@ -137,16 +137,17 @@
     <script>
       // === НАСТРОЙКИ ===
       // ВСТАВЬТЕ СЮДА ВАШУ ССЫЛКУ НА GOOGLE APPS SCRIPT
-      const API_URL = 'https://script.google.com/macros/s/AKfycbxJVBmyQHHdHwr0xQLl3prqPUon_rWTWExyB8IKROvM3xmjSm8Uwcty6qvSHvV8gOh3Lg/exec';
+      const API_URL = 'https://script.google.com/macros/s/AKfycbxCQEilTSiVEi1X7Kq69ZrR3ZcOjCP-HDJuEVVJjeNE4jMm-nvSImwdTRQWdUP2zgRBEA/exec';
 
-      // === ИНИЦИАЛИЗАЦИЯ TELEGRAM WEBAPP ===
-      const bridge = window.WebApp || window.Telegram?.WebApp || null;
+      // === ИНИЦИАЛИЗАЦИЯ MAX WEBAPP (БЕЗ TELEGRAM) ===
+      const bridge = window.WebApp;
       if (bridge) {
         bridge.ready();
         bridge.expand();
       }
 
-      const initDataUnsafe = (bridge && bridge.initDataUnsafe) || {};
+      // Получаем данные напрямую из WebApp (стандарт MAX)
+      const initDataUnsafe = bridge ? bridge.initDataUnsafe : {};
       const chatInfo = initDataUnsafe.chat || null;
       
       // Проверка: запущен ли из группы/канала
@@ -160,8 +161,8 @@
         document.getElementById('warn').classList.remove('hidden');
       }
 
-      // === ПЕРЕМЕННЫЕ СОСТОЯНИЯ (ИСПРАВЛЕНО: был синтаксический error) ===
-      let bookings = ; // Теперь это пустой массив, а не ошибка
+      // === ПЕРЕМЕННЫЕ СОСТОЯНИЯ ===
+      let bookings = ; // Исправлено: пустой массив
       let weekOffset = 0;
       let selectedDate = toKey(new Date());
 
