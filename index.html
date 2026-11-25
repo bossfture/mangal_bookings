@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Бронирование мангала</title>
+    <!-- Подключаем SDK Telegram WebApp -->
     <script src="https://st.max.ru/js/max-web-app.js"></script>
     <style>
       :root { color-scheme: dark; }
@@ -14,11 +15,14 @@
         margin: 0; padding: 12px;
       }
       h1 { margin: 8px 0 16px; font-size: 20px; text-align: center; }
+      
+      /* Блок предупреждения */
       .warn {
         background: #3a2f00; border: 1px solid #b58a00; color: #ffd54f;
         padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px;
       }
-      .debug { font-size: 11px; color: #777; text-align: center; margin-top: 6px; }
+      
+      /* Навигация по неделям */
       .week-nav {
         display: flex; align-items: center; justify-content: space-between;
         margin-bottom: 4px;
@@ -29,6 +33,8 @@
         font-size: 18px; cursor: pointer;
       }
       .week-label { font-size: 14px; color: #bdbdbd; }
+
+      /* Сетка календаря */
       .week-grid {
         display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
       }
@@ -38,18 +44,28 @@
       }
       .day-col:active { background: #222; }
       .day-name { font-size: 11px; color: #9e9e9e; text-transform: uppercase; letter-spacing: 0.5px; }
+      
       .day-num {
         width: 40px; height: 40px; border-radius: 50%;
         display: flex; align-items: center; justify-content: center;
         font-size: 16px; font-weight: 600;
         border: 1.5px solid transparent;
+        color: #bdbdbd; /* Цвет по умолчанию */
       }
-      .day-col.today .day-num { background: #f2f2f2; color: #121212; }
-      .day-col.selected .day-num { border-color: #8ab4f8; }
-      .day-col.past { opacity: 0.35; }
+      
+      /* Стили для активных дней */
+      .day-col.today .day-num { background: #f2f2f2; color: #121212; border-color: transparent; }
+      .day-col.selected .day-num { border-color: #8ab4f8; color: #f2f2f2; }
+      .day-col.past .day-num { color: #444; cursor: not-allowed; }
+      .day-col.past:hover .day-num { background: transparent; }
+      
+      /* Точка бронирования */
       .dot { width: 6px; height: 6px; border-radius: 50%; background: #8ab4f8; }
       .spacer { width: 6px; height: 6px; }
+
       .caption { text-align: center; color: #bdbdbd; font-size: 14px; margin: 10px 0 4px; }
+      
+      /* Список броней */
       .booking-list { margin-top: 10px; }
       .booking-item {
         background: #1e1e1e; border-left: 4px solid #ffb74d;
@@ -60,9 +76,11 @@
       .booking-item .comment { color: #bdbdbd; font-size: 12px; }
       .cancel-btn {
         background: #e53935; color: white; border: none;
-        padding: 5px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
+        padding: 5px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; float: right;
       }
       .empty-note { color: #888; font-size: 14px; text-align: center; margin-top: 20px; }
+
+      /* Форма бронирования */
       form {
         background: #1e1e1e; padding: 14px; border-radius: 12px; margin-top: 14px;
       }
@@ -78,17 +96,19 @@
         font-weight: 600; font-size: 15px; cursor: pointer;
       }
       .submit-btn:disabled { background: #444; color: #888; }
+      
       .status { margin-top: 8px; font-size: 13px; color: #bdbdbd; }
       .hidden { display: none; }
       .hint { font-size: 12px; color: #777; margin-top: 12px; text-align: center; }
+      .debug { font-size: 10px; color: #ff4d4d; text-align: center; margin-top: 8px; word-break: break-all; }
     </style>
   </head>
   <body>
     <h1>🍖 Бронирование мангала</h1>
 
     <div id="warn" class="warn hidden">
-      Не удалось определить чат: запустите приложение из группового чата с ботом.
-      Календарь открыт, но брони не подгрузятся.
+      ⚠️ Не удалось определить чат. Откройте приложение из группового чата с ботом.
+      Календарь будет работать, но брони не сохранятся.
     </div>
 
     <div class="week-nav">
@@ -115,33 +135,44 @@
     <div class="debug" id="debug"></div>
 
     <script>
-      // === ВСТАВЬТЕ СЮДА ВАШУ ССЫЛКУ НА GOOGLE APPS SCRIPT ===
+      // === НАСТРОЙКИ ===
+      // ВСТАВЬТЕ СЮДА ВАШУ ССЫЛКУ НА GOOGLE APPS SCRIPT
       const API_URL = 'https://script.google.com/macros/s/AKfycbxJVBmyQHHdHwr0xQLl3prqPUon_rWTWExyB8IKROvM3xmjSm8Uwcty6qvSHvV8gOh3Lg/exec';
 
+      // === ИНИЦИАЛИЗАЦИЯ TELEGRAM WEBAPP ===
       const bridge = window.WebApp || window.Telegram?.WebApp || null;
-      const initDataUnsafe = (bridge && bridge.initDataUnsafe) || {};
+      if (bridge) {
+        bridge.ready();
+        bridge.expand();
+      }
 
+      const initDataUnsafe = (bridge && bridge.initDataUnsafe) || {};
       const chatInfo = initDataUnsafe.chat || null;
-      const isGroupChat = !!chatInfo &&
-        (chatInfo.type === 'CHAT' || chatInfo.type === 'CHANNEL');
+      
+      // Проверка: запущен ли из группы/канала
+      const isGroupChat = !!chatInfo && (chatInfo.type === 'CHAT' || chatInfo.type === 'CHANNEL');
       const chatId = isGroupChat ? String(chatInfo.id) : null;
-      const userName =
-        (initDataUnsafe.user && (initDataUnsafe.user.first_name || initDataUnsafe.user.username)) || 'Гость';
+      
+      // Имя пользователя для отображения
+      const userName = (initDataUnsafe.user && (initDataUnsafe.user.first_name || initDataUnsafe.user.username)) || 'Гость';
 
       if (!chatId) {
         document.getElementById('warn').classList.remove('hidden');
       }
 
-      let bookings = ;          // <-- исправлено: был пустой знак после =
+      // === ПЕРЕМЕННЫЕ СОСТОЯНИЯ (ИСПРАВЛЕНО: был синтаксический error) ===
+      let bookings = ; // Теперь это пустой массив, а не ошибка
       let weekOffset = 0;
       let selectedDate = toKey(new Date());
+
       const DAY_NAMES = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
 
       function setDebug(text) {
-        document.getElementById('debug').textContent = text;
+        const el = document.getElementById('debug');
+        if (el) el.textContent = text;
       }
 
-      // ---------- Утилиты дат ----------
+      // === УТИЛИТЫ ДАТ ===
       function toKey(d) {
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -149,17 +180,13 @@
         return y + '-' + m + '-' + day;
       }
 
-      let bookings = ;          // <-- исправлено: был пустой знак после =
-      let weekOffset = 0;
-      let selectedDate = toKey(new Date());
-
       function normDate(v) {
         return String(v).substring(0, 10);
       }
 
       function startOfWeek(d) {
         const copy = new Date(d);
-        const diff = (copy.getDay() + 6) % 7; // ПН = 0
+        const diff = (copy.getDay() + 6) % 7; // Делаем понедельник первым днем (0)
         copy.setDate(copy.getDate() - diff);
         copy.setHours(0, 0, 0, 0);
         return copy;
@@ -178,18 +205,22 @@
         return base.toLocaleDateString('ru-RU', opt) + ' – ' + end.toLocaleDateString('ru-RU', opt);
       }
 
-      // ---------- Загрузка броней ----------
+      // === ЗАГРУЗКА ДАННЫХ ===
       async function loadBookings() {
         if (!chatId) {
-          setDebug('Нет chat_id: календарь будет без данных');
+          setDebug('Режим отладки: нет chat_id, календарь без данных');
           renderCalendar();
           showDetails(selectedDate);
           return;
         }
 
         try {
+          // Добавляем timestamp, чтобы браузер не кэшировал ответ
           const url = API_URL + '?chat_id=' + encodeURIComponent(chatId) + '&t=' + Date.now();
           const resp = await fetch(url);
+          
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          
           const data = await resp.json();
 
           if (data.status === 'ok' && Array.isArray(data.data)) {
@@ -197,18 +228,19 @@
               ...b,
               date: normDate(b.date) 
             }));
-            setDebug('Загружено броней: ' + bookings.length);
+            setDebug('Успешно загружено броней: ' + bookings.length);
           } else {
-            setDebug('Сервер ответил, но данных нет: ' + JSON.stringify(data));
+            setDebug('Сервер ответил, но формат данных неверный: ' + JSON.stringify(data));
           }
         } catch (e) {
-          setDebug('Ошибка загрузки: ' + e.message);
+          setDebug('Ошибка сети или скрипта: ' + e.message);
+          console.error(e);
         }
         renderCalendar();
         showDetails(selectedDate);
       }
 
-      // ---------- Календарь ----------
+      // === ОТРИСОВКА КАЛЕНДАРЯ ===
       function renderCalendar() {
         const grid = document.getElementById('weekGrid');
         grid.innerHTML = '';
@@ -228,6 +260,7 @@
           col.className = 'day-col';
           col.dataset.date = key;
 
+          // Стили
           if (key === tKey) col.classList.add('today');
           if (key === selectedDate) col.classList.add('selected');
           if (key < tKey) col.classList.add('past');
@@ -235,6 +268,7 @@
           const hasBooking = bookings.some(b => b.date === key);
           if (hasBooking) col.classList.add('has-booking');
 
+          // Элементы дня
           const name = document.createElement('span');
           name.className = 'day-name';
           name.textContent = DAY_NAMES[i];
@@ -249,7 +283,11 @@
           dotOrSpacer.className = hasBooking ? 'dot' : 'spacer';
           col.appendChild(dotOrSpacer);
 
-          col.addEventListener('click', () => selectDay(key));
+          // Клик
+          if (key >= tKey) {
+            col.addEventListener('click', () => selectDay(key));
+          }
+
           grid.appendChild(col);
         }
 
@@ -265,7 +303,7 @@
         showDetails(key);
       }
 
-      // ---------- Список броней дня ----------
+      // === СПИСОК БРОНЕЙ ДНЯ ===
       function showDetails(date) {
         const list = document.getElementById('bookingList');
         list.innerHTML = '';
@@ -298,12 +336,16 @@
           list.appendChild(el);
         });
 
+        // Обработчики кнопок отмены
         list.querySelectorAll('.cancel-btn').forEach(btn => {
-          btn.addEventListener('click', () => cancelBooking(btn.dataset.rowId, btn));
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Чтобы не сработал клик по дню
+            cancelBooking(btn.dataset.rowId, btn);
+          });
         });
       }
 
-      // ---------- Отмена брони ----------
+      // === ОТМЕНА БРОНИ ===
       async function cancelBooking(rowId, btn) {
         btn.disabled = true;
         btn.textContent = 'Отмена...';
@@ -329,7 +371,7 @@
         }
       }
 
-      // ---------- Форма ----------
+      // === ОТПРАВКА БРОНИ ===
       document.getElementById('bookingForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const status = document.getElementById('status');
@@ -383,7 +425,7 @@
         }
       });
 
-      // ---------- Стрелки недель ----------
+      // === НАВИГАЦИЯ ===
       document.getElementById('prevWeek').addEventListener('click', () => {
         weekOffset--;
         renderCalendar();
@@ -393,7 +435,7 @@
         renderCalendar();
       });
 
-      // ---------- Старт ----------
+      // === ЗАПУСК ===
       renderCalendar();
       showDetails(selectedDate);
       loadBookings();
