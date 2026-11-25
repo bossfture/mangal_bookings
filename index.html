@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Бронирование мангала</title>
-    <!-- MAX Bridge — без него объект window.WebApp не создастся -->
+    <!-- MAX Bridge -->
     <script src="https://st.max.ru/js/max-web-app.js"></script>
     <style>
       :root { color-scheme: dark; }
@@ -123,7 +123,7 @@
 
     <script>
       // === ВСТАВЬТЕ СЮДА URL ВАШЕГО GOOGLE APPS SCRIPT ===
-      const API_URL = 'https://script.google.com/macros/s/AKfycbzOk1nD0Jjq0hTkMHjW9G_mRxmcp96r6kQXntB2asWwmR9XpIe8A5JvhCgkajyak6xwvA/exec';
+      const API_URL = 'https://script.google.com/macros/s/AKfycbywyMc-wpMEnQhV5MNucqXchn9h8nOUcOg2oGq6GEPwfzju8cI_LT1nImVK9rwUlAhyww/exec';
 
       const bridge = window.WebApp || window.Telegram?.WebApp || null;
       const initDataUnsafe = (bridge && bridge.initDataUnsafe) || {};
@@ -139,7 +139,7 @@
         document.getElementById('warn').classList.remove('hidden');
       }
 
-      let bookings = [];
+      let bookings = ;
       let weekOffset = 0;
       let selectedDate = toKey(new Date());
 
@@ -150,16 +150,18 @@
       }
 
       // ---------- Утилиты дат ----------
+      // Возвращает строку "ГГГГ-ММ-ДД" для текущей даты или переданной
       function toKey(d) {
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
+        return `${y}-${m}-\${day}`;
       }
 
-      // Приводим любую дату из таблицы к виду гггг-мм-дд
+      // ВАЖНО: Не создаем new Date() из строки, чтобы избежать сдвига часовых поясов.
+      // Просто берем первые 10 символов.
       function normDate(v) {
-        return String(v).slice(0, 10);
+        return String(v).substring(0, 10);
       }
 
       function startOfWeek(d) {
@@ -184,19 +186,20 @@
       }
 
       // ---------- Загрузка броней ----------
-      // Метка времени в URL не даёт Google отдавать закэшированный старый ответ
       async function loadBookings() {
         if (!chatId) return;
         try {
-          const resp = await fetch(`${API_URL}?chat_id=${encodeURIComponent(chatId)}&t=${Date.now()}`);
+          // t=... нужен, чтобы Google не отдавал кэш
+          const resp = await fetch(`${API_URL}?chat_id=${encodeURIComponent(chatId)}&t=\${Date.now()}`);
           const data = await resp.json();
 
           if (data.status === 'ok' && Array.isArray(data.data)) {
             bookings = data.data.map(b => ({
               ...b,
-              date: normDate(b.date)
+              // Нормализуем дату сразу при загрузке
+              date: normDate(b.date) 
             }));
-            setDebug(`Загружено броней: ${bookings.length}`);
+            setDebug(`Загружено броней: \${bookings.length}`);
           } else {
             setDebug('Сервер ответил, но данных нет');
           }
@@ -230,6 +233,8 @@
           if (key === tKey) col.classList.add('today');
           if (key === selectedDate) col.classList.add('selected');
           if (key < tKey) col.classList.add('past');
+          
+          // Проверка наличия брони по нормализованной дате
           if (bookings.some(b => b.date === key)) col.classList.add('has-booking');
 
           const name = document.createElement('span');
@@ -262,7 +267,7 @@
         showDetails(key);
       }
 
-      // ---------- Список броней дня (из уже загруженных данных) ----------
+      // ---------- Список броней дня ----------
       function showDetails(date) {
         const list = document.getElementById('bookingList');
         list.innerHTML = '';
@@ -281,16 +286,16 @@
           const isOwner = b.user_name === userName;
           const youBadge = isOwner ? '<span class="you">(ваша бронь)</span>' : '';
           const cancelHtml = isOwner
-            ? `<button class="cancel-btn" data-row-id="${b.row_id}">Отменить</button>`
+            ? `<button class="cancel-btn" data-row-id="\${b.row_id}">Отменить</button>`
             : '';
 
           el.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
               <div>
                 <span class="owner">Создал: ${b.user_name}</span>${youBadge}<br>
-                <span class="comment">${b.comment}</span>
+                <span class="comment">\${b.comment}</span>
               </div>
-              ${cancelHtml}
+              \${cancelHtml}
             </div>`;
           list.appendChild(el);
         });
@@ -314,7 +319,7 @@
           const result = await resp.json();
 
           if (result.status === 'success') {
-            await loadBookings(); // точка исчезнет сразу
+            await loadBookings(); // Перезагружаем список, точка исчезнет
           } else {
             alert('Ошибка: ' + (result.message || 'Не удалось отменить'));
           }
@@ -357,7 +362,8 @@
           const result = await resp.json();
 
           if (result.status === 'success') {
-            // Мгновенно показываем бронь, не дожидаясь перезагрузки данных
+            // Мгновенно добавляем в локальный список (без перезагрузки с сервера)
+            // Это гарантирует, что точка появится сразу, даже если сервер вернет ответ с задержкой
             bookings.push({
               date: selectedDate,
               comment: comment,
