@@ -95,7 +95,7 @@
     <div class="booking-list" id="bookingList"></div>
 
     <form id="bookingForm">
-      <label>Комментарий (кол-во человек, время, что привезти)</label>
+      <label>Комментарий ( время, со скольки до скольки...)</label>
       <textarea id="comment" placeholder="Например: 4 человека, с 17 до 19" rows="3" required></textarea>
       <button type="submit" id="submitBtn" class="submit-btn">Забронировать</button>
       <div id="status" class="status"></div>
@@ -286,7 +286,7 @@
           el.innerHTML =
             '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">' +
             '<div>' +
-            '<span class="owner">Забронил: ' + b.user_name + '</span>' + youBadge + '<br>' +
+            '<span class="owner">Забронил 🔥  ' + b.user_name + '</span>' + youBadge + '<br>' +
             '<span class="comment">' + b.comment + '</span>' +
             '</div>' +
             cancelHtml +
