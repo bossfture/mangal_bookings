@@ -16,13 +16,12 @@
       }
       h1 { margin: 8px 0 16px; font-size: 20px; text-align: center; }
 
-      /* Плашка-предупреждение */
       .warn {
         background: #3a2f00; border: 1px solid #b58a00; color: #ffd54f;
         padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px;
       }
+      .debug { font-size: 11px; color: #777; text-align: center; margin-top: 6px; }
 
-      /* Навигация по неделям */
       .week-nav {
         display: flex; align-items: center; justify-content: space-between;
         margin-bottom: 4px;
@@ -34,7 +33,6 @@
       }
       .week-label { font-size: 14px; color: #bdbdbd; }
 
-      /* Строка календаря */
       .week-grid {
         display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
       }
@@ -53,13 +51,11 @@
       .day-col.today .day-num { background: #f2f2f2; color: #121212; }
       .day-col.selected .day-num { border-color: #8ab4f8; }
       .day-col.past { opacity: 0.35; }
-      .dot { width: 5px; height: 5px; border-radius: 50%; background: #8ab4f8; }
-      .spacer { width: 5px; height: 5px; } /* держит высоту ряда ровной */
+      .dot { width: 6px; height: 6px; border-radius: 50%; background: #8ab4f8; }
+      .spacer { width: 6px; height: 6px; }
 
-      /* Подпись под календарём */
       .caption { text-align: center; color: #bdbdbd; font-size: 14px; margin: 10px 0 4px; }
 
-      /* Список броней */
       .booking-list { margin-top: 10px; }
       .booking-item {
         background: #1e1e1e; border-left: 4px solid #ffb74d;
@@ -74,7 +70,6 @@
       }
       .empty-note { color: #888; font-size: 14px; text-align: center; margin-top: 20px; }
 
-      /* Форма */
       form {
         background: #1e1e1e; padding: 14px; border-radius: 12px; margin-top: 14px;
       }
@@ -103,41 +98,36 @@
       Календарь открыт, но брони не подгрузятся.
     </div>
 
-    <!-- Навигация по неделям -->
     <div class="week-nav">
       <button id="prevWeek" type="button">‹</button>
       <span class="week-label" id="weekLabel"></span>
       <button id="nextWeek" type="button">›</button>
     </div>
 
-    <!-- Календарь -->
     <div class="week-grid" id="weekGrid"></div>
     <div class="caption" id="caption"></div>
 
-    <!-- Брони выбранного дня -->
     <div id="dayDetails">
       <div class="booking-list" id="bookingList"></div>
     </div>
 
-    <!-- Форма бронирования -->
     <form id="bookingForm">
-      <label>Комментарий (кол-во человек, что привезти и т.п.)</label>
-      <textarea id="comment" placeholder="Например: 4 человека, мясо, плед" rows="3" required></textarea>
+      <label>Комментарий (кол-во человек, время, что привезти)</label>
+      <textarea id="comment" placeholder="Например: 4 человека, с 17 до 19" rows="3" required></textarea>
       <button type="submit" id="submitBtn" class="submit-btn">Забронировать</button>
       <div id="status" class="status"></div>
     </form>
 
     <p class="hint">Точка под числом — день забронирован. Отменить может только создатель.</p>
+    <div class="debug" id="debug"></div>
 
     <script>
       // === ВСТАВЬТЕ СЮДА URL ВАШЕГО GOOGLE APPS SCRIPT ===
-      const API_URL = 'https://script.google.com/macros/s/AKfycbxMrOKsT9YTJHASW-GMC2xeurjuej-e3d97RGYJXe1mT1pJa_NWANJTxUGEVcbz4sOpeA/exec';
+      const API_URL = 'https://script.google.com/macros/s/AKfycbzOk1nD0Jjq0hTkMHjW9G_mRxmcp96r6kQXntB2asWwmR9XpIe8A5JvhCgkajyak6xwvA/exec';
 
-      // Данные из MAX Bridge (запасной вариант — Telegram API)
       const bridge = window.WebApp || window.Telegram?.WebApp || null;
       const initDataUnsafe = (bridge && bridge.initDataUnsafe) || {};
 
-      // В MAX chat приходит как объект { id, type: 'DIALOG' | 'CHAT' | 'CHANNEL' }
       const chatInfo = initDataUnsafe.chat || null;
       const isGroupChat = !!chatInfo &&
         (chatInfo.type === 'CHAT' || chatInfo.type === 'CHANNEL');
@@ -146,16 +136,18 @@
         (initDataUnsafe.user && (initDataUnsafe.user.first_name || initDataUnsafe.user.username)) || 'Гость';
 
       if (!chatId) {
-        // НЕ заменяем страницу, а просто показываем плашку сверху
         document.getElementById('warn').classList.remove('hidden');
-        console.log('initDataUnsafe:', JSON.stringify(initDataUnsafe));
       }
 
-      let bookings = [];      // все брони чата
-      let weekOffset = 0;     // сдвиг по неделям
+      let bookings = [];
+      let weekOffset = 0;
       let selectedDate = toKey(new Date());
 
       const DAY_NAMES = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
+
+      function setDebug(text) {
+        document.getElementById('debug').textContent = text;
+      }
 
       // ---------- Утилиты дат ----------
       function toKey(d) {
@@ -163,6 +155,11 @@
         const m = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         return `${y}-${m}-${day}`;
+      }
+
+      // Приводим любую дату из таблицы к виду гггг-мм-дд
+      function normDate(v) {
+        return String(v).slice(0, 10);
       }
 
       function startOfWeek(d) {
@@ -183,9 +180,31 @@
         const end = new Date(base);
         end.setDate(base.getDate() + 6);
         const opt = { day: 'numeric', month: 'long' };
-        const a = base.toLocaleDateString('ru-RU', opt);
-        const b = end.toLocaleDateString('ru-RU', opt);
-        return `${a} – ${b}`;
+        return `${base.toLocaleDateString('ru-RU', opt)} – ${end.toLocaleDateString('ru-RU', opt)}`;
+      }
+
+      // ---------- Загрузка броней ----------
+      // Метка времени в URL не даёт Google отдавать закэшированный старый ответ
+      async function loadBookings() {
+        if (!chatId) return;
+        try {
+          const resp = await fetch(`${API_URL}?chat_id=${encodeURIComponent(chatId)}&t=${Date.now()}`);
+          const data = await resp.json();
+
+          if (data.status === 'ok' && Array.isArray(data.data)) {
+            bookings = data.data.map(b => ({
+              ...b,
+              date: normDate(b.date)
+            }));
+            setDebug(`Загружено броней: ${bookings.length}`);
+          } else {
+            setDebug('Сервер ответил, но данных нет');
+          }
+        } catch (e) {
+          setDebug('Ошибка загрузки: ' + e.message);
+        }
+        renderCalendar();
+        showDetails(selectedDate);
       }
 
       // ---------- Календарь ----------
@@ -195,7 +214,6 @@
 
         const base = startOfWeek(new Date());
         base.setDate(base.getDate() + weekOffset * 7);
-
         document.getElementById('weekLabel').textContent = fmtRange(base);
 
         const tKey = todayKey();
@@ -232,7 +250,6 @@
           grid.appendChild(col);
         }
 
-        // Подпись под календарём
         const selDate = new Date(selectedDate + 'T00:00:00');
         const prefix = selectedDate === tKey ? 'Сегодня, ' : '';
         document.getElementById('caption').textContent =
@@ -245,22 +262,7 @@
         showDetails(key);
       }
 
-      // ---------- Данные ----------
-      async function loadBookings() {
-        if (!chatId) return; // без чата данные не грузим
-        try {
-          const resp = await fetch(`${API_URL}?chat_id=${encodeURIComponent(chatId)}`);
-          const data = await resp.json();
-          if (data.status === 'ok') {
-            bookings = data.data;
-            renderCalendar();
-            showDetails(selectedDate);
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      }
-
+      // ---------- Список броней дня (из уже загруженных данных) ----------
       function showDetails(date) {
         const list = document.getElementById('bookingList');
         list.innerHTML = '';
@@ -312,7 +314,7 @@
           const result = await resp.json();
 
           if (result.status === 'success') {
-            await loadBookings();
+            await loadBookings(); // точка исчезнет сразу
           } else {
             alert('Ошибка: ' + (result.message || 'Не удалось отменить'));
           }
@@ -355,9 +357,19 @@
           const result = await resp.json();
 
           if (result.status === 'success') {
+            // Мгновенно показываем бронь, не дожидаясь перезагрузки данных
+            bookings.push({
+              date: selectedDate,
+              comment: comment,
+              chat_id: chatId,
+              user_name: userName,
+              row_id: result.row_id || null
+            });
+            renderCalendar();
+            showDetails(selectedDate);
+
             status.textContent = '✅ Бронь оформлена!';
             document.getElementById('comment').value = '';
-            await loadBookings();
             setTimeout(() => { status.textContent = ''; }, 2000);
           } else {
             status.textContent = '❌ Ошибка: ' + (result.message || 'Не удалось сохранить');
@@ -386,4 +398,3 @@
     </script>
   </body>
 </html>
-
