@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Бронирование беседки</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 12px; background: #f5f6f9; color: #1a1a1a; }
+      h1 { margin-top: 0; font-size: 18px; }
+      .week-view { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 24px; }
+      .day-cell { border: 1px solid #ddd; padding: 8px; min-height: 90px; background: white; border-radius: 6px; cursor: pointer; }
+      .day-cell.has-booking { background: #e8f5e9; border-color: #81c784; }
+      .day-cell.selected { border-color: #2196f3; background: #e3f2fd; }
+      .day-label { font-weight: 600; font-size: 14px; margin-bottom: 6px; display: block; }
+      .booking-list { margin-top: 10px; }
+      .booking-item { background: #fff3e0; border-left: 4px solid #ffab40; padding: 6px 8px; margin: 4px 0; border-radius: 4px; font-size: 13px; }
+      .booking-item .owner { font-weight: bold; }
+      .booking-item .you { color: #2196f3; font-weight: bold; margin-left: 6px; }
+      .cancel-btn { background: #ff5252; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+      form { background: white; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 16px; }
+      input, textarea { width: 100%; margin-bottom: 8px; padding: 8px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+      .submit-btn { width: 100%; padding: 10px; background: #2196f3; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; }
+      .submit-btn:disabled { background: #ccc; }
+      .status { margin-top: 10px; font-size: 13px; color: #555; }
+      .hidden { display: none; }
+      .empty-note { color: #888; font-size: 13px; }
+      .hint { font-size: 12px; color: #666; }
+    </style>
+  </head>
+  <body>
+    <h1>🌳 Бронирование беседки</h1>
+
+    <div class="week-view" id="weekView"></div>
+
+    <!-- Форма бронирования -->
+    <form id="bookingForm" class="hidden">
+      <label>Комментарий (кол-во человек, что привезти и т.п.)</label>
+      <textarea id="comment" placeholder="Например: 4 человека, мангал, плед" rows="3" required></textarea>
+      <input type="hidden" id="date">
+      <button type="submit" id="submitBtn" class="submit-btn">Забронировать</button>
+      <div id="status" class="status"></div>
+    </form>
+
+    <!-- Список броней по выбранной дате -->
+    <div id="dayDetails" class="hidden">
+      <h3 id="dayLabel"></h3>
+      <div class="booking-list" id="bookingList"></div>
+      <p class="hint">Все участники видят брони. Отменить может только создатель.</p>
+    </div>
+
+    <script>
+      // === ВСТАВЬТЕ СЮДА URL ВАШЕГО GOOGLE APPS SCRIPT ===
+      const API_URL = 'https://script.google.com/macros/s/AKfycbx4cyGEYiG0epY2bPbVDTw6u-ROxDaSPTdObvNGT0HxSkfG-uNONn1zamliXr_4JOYzJw/exec';
+
+      // Получаем chat_id и имя пользователя из initData мини-приложения
+      const initDataUnsafe = window.Telegram?.WebApp?.initDataUnsafe || {};
+      const chatId = initDataUnsafe.chat_id || null;
+      const userName = (initDataUnsafe.user && initDataUnsafe.user.first_name) || 'Гость';
+
+      let selectedDate = null;
+
+      // Если запущено не из чата — предупреждаем и не продолжаем
+      if (!chatId) {
+        document.body.innerHTML = '<p>Это мини‑приложение предназначено для группового чата. Запустите его из чата, где добавлен бот.</p>';
+      } else {
+        main();
+      }
+
+      function main() {
+        renderWeek();
+        loadBookings();
+      }
+
+      function renderWeek() {
+        const now = new Date();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay()); // воскресенье как начало недели
+
+        const container = document.getElementById('weekView');
+        container.innerHTML = '';
+
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(startOfWeek);
+          d.setDate(startOfWeek.getDate() + i);
+          const dateStr = formatDate(d); // YYYY-MM-DD
+
+          const cell = document.createElement('div');
+          cell.className = 'day-cell';
+          cell.dataset.date = dateStr; // точное сравнение вместо эвристики по тексту
+
+          const label = document.createElement('span');
+          label.className = 'day-label';
+          label.textContent = d.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' });
+          cell.appendChild(label);
+
+          cell.addEventListener('click', () => {
+            // Показываем и детали дня, и форму — можно сразу посмотреть брони или добавить свою
+            showDayDetails(dateStr);
+            openBookingForm(dateStr);
+          });
+
+          container.appendChild(cell);
+        }
+      }
+
+      function formatDate(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      }
+
+      async function loadBookings() {
+        try {
+          const resp = await fetch(`${API_URL}?chat_id=${encodeURIComponent(chatId)}`);
+          const data = await resp.json();
+          if (data.status !== 'ok') return;
+
+          const bookedDates = {};
+          data.data.forEach(b => { bookedDates[b.date] = true; });
+
+          document.querySelectorAll('.day-cell').forEach(cell => {
+            if (bookedDates[cell.dataset.date]) {
+              cell.classList.add('has-booking');
+            } else {
+              cell.classList.remove('has-booking');
+            }
+          });
+        } catch (e) { console.error(e); }
+      }
+
+      function showDayDetails(date) {
+        const details = document.getElementById('dayDetails');
+        const list = document.getElementById('bookingList');
+        details.classList.remove('hidden');
+        list.innerHTML = '';
+        document.getElementById('dayLabel').textContent = `Брони на ${date}`;
+
+        fetch(`${API_URL}?chat_id=${encodeURIComponent(chatId)}`)
+          .then(r => r.json())
+          .then(data => {
+            if (data.status !== 'ok') return;
+
+            data.data
+              .filter(b => b.date === date)
+              .forEach(b => {
+                const el = document.createElement('div');
+                el.className = 'booking-item';
+
+                const isOwner = b.user_name === userName;
+                const youBadge = isOwner ? '<span class="you">(ваша бронь)</span>' : '';
+                const cancelHtml = isOwner
+                  ? `<button class="cancel-btn" data-row-id="${b.row_id}">Отменить</button>`
+                  : '';
+
+                el.innerHTML = `
+                  <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                    <div>
+                      <span class="owner">Создал: ${b.user_name}</span>${youBadge}<br>
+                      <span style="color:#555; font-size:12px;">${b.comment}</span>
+                    </div>
+                    ${cancelHtml}
+                  </div>`;
+
+                list.appendChild(el);
+              });
+
+            if (list.children.length === 0) {
+              list.innerHTML = '<div class="empty-note">На эту дату броней нет</div>';
+            }
+
+            // Навешиваем обработчики отмены
+            list.querySelectorAll('.cancel-btn').forEach(btn => {
+              btn.addEventListener('click', () => cancelBooking(btn.dataset.rowId, btn));
+            });
+          })
+          .catch(e => console.error(e));
+      }
+
+      async function cancelBooking(rowId, btn) {
+        btn.disabled = true;
+        btn.textContent = 'Отмена...';
+
+        try {
+          const formData = new FormData();
+          formData.append('action', 'cancel');
+          formData.append('row_id', rowId);
+          formData.append('user_name', userName);
+
+          const resp = await fetch(API_URL, { method: 'POST', body: formData });
+          const result = await resp.json();
+
+          if (result.status === 'success') {
+            alert('Бронь отменена');
+            loadBookings();
+            showDayDetails(selectedDate || rowId);
+          } else {
+            alert('Ошибка: ' + (result.message || 'Не удалось отменить'));
+          }
+        } catch (err) {
+          alert('Ошибка сети: ' + err.message);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Отменить';
+        }
+      }
+
+      function openBookingForm(date) {
+        selectedDate = date;
+        document.getElementById('date').value = date;
+        document.getElementById('status').textContent = '';
+        document.getElementById('bookingForm').classList.remove('hidden');
+        document.querySelectorAll('.day-cell').forEach(c => {
+          c.classList.toggle('selected', c.dataset.date === date);
+        });
+      }
+
+      document.getElementById('bookingForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!selectedDate) return;
+
+        const comment = document.getElementById('comment').value;
+        const btn = document.getElementById('submitBtn');
+        const status = document.getElementById('status');
+        btn.disabled = true;
+        status.textContent = 'Отправка...';
+
+        try {
+          const formData = new FormData();
+          formData.append('action', 'add');
+          formData.append('date', selectedDate);
+          formData.append('comment', comment);
+          formData.append('chat_id', chatId);
+          formData.append('user_name', userName);
+
+          const resp = await fetch(API_URL, { method: 'POST', body: formData });
+          const result = await resp.json();
+
+          if (result.status === 'success') {
+            status.textContent = '✅ Бронь оформлена!';
+            loadBookings();
+            setTimeout(() => {
+              document.getElementById('bookingForm').reset();
+              document.getElementById('bookingForm').classList.add('hidden');
+              document.querySelectorAll('.day-cell').forEach(c => c.classList.remove('selected'));
+              selectedDate = null;
+            }, 2000);
+          } else {
+            status.textContent = '❌ Ошибка: ' + (result.message || 'Не удалось сохранить');
+          }
+        } catch (err) {
+          status.textContent = '❌ Ошибка сети: ' + err.message;
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
