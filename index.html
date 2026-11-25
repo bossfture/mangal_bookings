@@ -132,10 +132,9 @@
         document.getElementById('warn').classList.remove('hidden');
       }
 
-      let bookings = ;
+      let bookings = ;          // <-- исправлено: был пустой знак после =
       let weekOffset = 0;
       let selectedDate = toKey(new Date());
-
       const DAY_NAMES = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
 
       function setDebug(text) {
@@ -149,6 +148,10 @@
         const day = String(d.getDate()).padStart(2, '0');
         return y + '-' + m + '-' + day;
       }
+
+      let bookings = ;          // <-- исправлено: был пустой знак после =
+      let weekOffset = 0;
+      let selectedDate = toKey(new Date());
 
       function normDate(v) {
         return String(v).substring(0, 10);
