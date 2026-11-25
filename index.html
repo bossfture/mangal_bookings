@@ -123,7 +123,7 @@
 
     <script>
       // === ВСТАВЬТЕ СЮДА URL ВАШЕГО GOOGLE APPS SCRIPT ===
-      const API_URL = 'https://script.google.com/macros/s/AKfycbywyMc-wpMEnQhV5MNucqXchn9h8nOUcOg2oGq6GEPwfzju8cI_LT1nImVK9rwUlAhyww/exec';
+      const API_URL = 'https://script.google.com/macros/s/ВАШ_ID/exec';
 
       const bridge = window.WebApp || window.Telegram?.WebApp || null;
       const initDataUnsafe = (bridge && bridge.initDataUnsafe) || {};
@@ -150,7 +150,6 @@
       }
 
       // ---------- Утилиты дат ----------
-      // Возвращает строку "ГГГГ-ММ-ДД" для текущей даты или переданной
       function toKey(d) {
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -158,8 +157,6 @@
         return `${y}-${m}-\${day}`;
       }
 
-      // ВАЖНО: Не создаем new Date() из строки, чтобы избежать сдвига часовых поясов.
-      // Просто берем первые 10 символов.
       function normDate(v) {
         return String(v).substring(0, 10);
       }
@@ -189,14 +186,12 @@
       async function loadBookings() {
         if (!chatId) return;
         try {
-          // t=... нужен, чтобы Google не отдавал кэш
           const resp = await fetch(`${API_URL}?chat_id=${encodeURIComponent(chatId)}&t=\${Date.now()}`);
           const data = await resp.json();
 
           if (data.status === 'ok' && Array.isArray(data.data)) {
             bookings = data.data.map(b => ({
               ...b,
-              // Нормализуем дату сразу при загрузке
               date: normDate(b.date) 
             }));
             setDebug(`Загружено броней: \${bookings.length}`);
@@ -234,7 +229,6 @@
           if (key === selectedDate) col.classList.add('selected');
           if (key < tKey) col.classList.add('past');
           
-          // Проверка наличия брони по нормализованной дате
           if (bookings.some(b => b.date === key)) col.classList.add('has-booking');
 
           const name = document.createElement('span');
@@ -319,7 +313,7 @@
           const result = await resp.json();
 
           if (result.status === 'success') {
-            await loadBookings(); // Перезагружаем список, точка исчезнет
+            await loadBookings();
           } else {
             alert('Ошибка: ' + (result.message || 'Не удалось отменить'));
           }
@@ -362,8 +356,6 @@
           const result = await resp.json();
 
           if (result.status === 'success') {
-            // Мгновенно добавляем в локальный список (без перезагрузки с сервера)
-            // Это гарантирует, что точка появится сразу, даже если сервер вернет ответ с задержкой
             bookings.push({
               date: selectedDate,
               comment: comment,
