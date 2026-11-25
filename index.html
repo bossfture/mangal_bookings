@@ -4,6 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Бронирование беседки</title>
+    <!-- Подключаем MAX Bridge — без него объект window.WebApp не создастся -->
+    <script src="https://st.max.ru/js/max-web-app.js"></script>
     <style>
       body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 12px; background: #f5f6f9; color: #1a1a1a; }
       h1 { margin-top: 0; font-size: 18px; }
@@ -50,16 +52,21 @@
 
     <script>
       // === ВСТАВЬТЕ СЮДА URL ВАШЕГО GOOGLE APPS SCRIPT ===
-      const API_URL = 'https://script.google.com/macros/s/AKfycbx4cyGEYiG0epY2bPbVDTw6u-ROxDaSPTdObvNGT0HxSkfG-uNONn1zamliXr_4JOYzJw/exec';
+      const API_URL = 'https://script.google.com/macros/s/AKfycbx5djzpyvMShN-0oMdlGv_M475IeiyYMhqPFf-LeMReyh3FX1oEq5VEtQcfS2w3U-YgCA/exec';
 
-      // Получаем chat_id и имя пользователя из initData мини-приложения
-      const initDataUnsafe = window.Telegram?.WebApp?.initDataUnsafe || {};
-      const chatId = initDataUnsafe.chat_id || null;
+      // В MAX объект называется window.WebApp (Bridge), запасной вариант — Telegram API
+      const bridge = window.WebApp || window.Telegram?.WebApp;
+      const initDataUnsafe = (bridge && bridge.initDataUnsafe) || {};
+
+      // В MAX chat приходит как объект { id, type: 'DIALOG' | 'CHAT' | 'CHANNEL' }
+      const chatInfo = initDataUnsafe.chat || null;
+      const isGroupChat = chatInfo && (chatInfo.type === 'CHAT' || chatInfo.type === 'CHANNEL');
+      const chatId = isGroupChat ? String(chatInfo.id) : null;
       const userName = (initDataUnsafe.user && initDataUnsafe.user.first_name) || 'Гость';
 
       let selectedDate = null;
 
-      // Если запущено не из чата — предупреждаем и не продолжаем
+      // Если запущено не из группового чата — предупреждаем и не продолжаем
       if (!chatId) {
         document.body.innerHTML = '<p>Это мини‑приложение предназначено для группового чата. Запустите его из чата, где добавлен бот.</p>';
       } else {
@@ -106,154 +113,5 @@
       function formatDate(d) {
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
-      }
+        const day = String(d.getDate()).padStart(2,
 
-      async function loadBookings() {
-        try {
-          const resp = await fetch(`${API_URL}?chat_id=${encodeURIComponent(chatId)}`);
-          const data = await resp.json();
-          if (data.status !== 'ok') return;
-
-          const bookedDates = {};
-          data.data.forEach(b => { bookedDates[b.date] = true; });
-
-          document.querySelectorAll('.day-cell').forEach(cell => {
-            if (bookedDates[cell.dataset.date]) {
-              cell.classList.add('has-booking');
-            } else {
-              cell.classList.remove('has-booking');
-            }
-          });
-        } catch (e) { console.error(e); }
-      }
-
-      function showDayDetails(date) {
-        const details = document.getElementById('dayDetails');
-        const list = document.getElementById('bookingList');
-        details.classList.remove('hidden');
-        list.innerHTML = '';
-        document.getElementById('dayLabel').textContent = `Брони на ${date}`;
-
-        fetch(`${API_URL}?chat_id=${encodeURIComponent(chatId)}`)
-          .then(r => r.json())
-          .then(data => {
-            if (data.status !== 'ok') return;
-
-            data.data
-              .filter(b => b.date === date)
-              .forEach(b => {
-                const el = document.createElement('div');
-                el.className = 'booking-item';
-
-                const isOwner = b.user_name === userName;
-                const youBadge = isOwner ? '<span class="you">(ваша бронь)</span>' : '';
-                const cancelHtml = isOwner
-                  ? `<button class="cancel-btn" data-row-id="${b.row_id}">Отменить</button>`
-                  : '';
-
-                el.innerHTML = `
-                  <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-                    <div>
-                      <span class="owner">Создал: ${b.user_name}</span>${youBadge}<br>
-                      <span style="color:#555; font-size:12px;">${b.comment}</span>
-                    </div>
-                    ${cancelHtml}
-                  </div>`;
-
-                list.appendChild(el);
-              });
-
-            if (list.children.length === 0) {
-              list.innerHTML = '<div class="empty-note">На эту дату броней нет</div>';
-            }
-
-            // Навешиваем обработчики отмены
-            list.querySelectorAll('.cancel-btn').forEach(btn => {
-              btn.addEventListener('click', () => cancelBooking(btn.dataset.rowId, btn));
-            });
-          })
-          .catch(e => console.error(e));
-      }
-
-      async function cancelBooking(rowId, btn) {
-        btn.disabled = true;
-        btn.textContent = 'Отмена...';
-
-        try {
-          const formData = new FormData();
-          formData.append('action', 'cancel');
-          formData.append('row_id', rowId);
-          formData.append('user_name', userName);
-
-          const resp = await fetch(API_URL, { method: 'POST', body: formData });
-          const result = await resp.json();
-
-          if (result.status === 'success') {
-            alert('Бронь отменена');
-            loadBookings();
-            showDayDetails(selectedDate || rowId);
-          } else {
-            alert('Ошибка: ' + (result.message || 'Не удалось отменить'));
-          }
-        } catch (err) {
-          alert('Ошибка сети: ' + err.message);
-        } finally {
-          btn.disabled = false;
-          btn.textContent = 'Отменить';
-        }
-      }
-
-      function openBookingForm(date) {
-        selectedDate = date;
-        document.getElementById('date').value = date;
-        document.getElementById('status').textContent = '';
-        document.getElementById('bookingForm').classList.remove('hidden');
-        document.querySelectorAll('.day-cell').forEach(c => {
-          c.classList.toggle('selected', c.dataset.date === date);
-        });
-      }
-
-      document.getElementById('bookingForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (!selectedDate) return;
-
-        const comment = document.getElementById('comment').value;
-        const btn = document.getElementById('submitBtn');
-        const status = document.getElementById('status');
-        btn.disabled = true;
-        status.textContent = 'Отправка...';
-
-        try {
-          const formData = new FormData();
-          formData.append('action', 'add');
-          formData.append('date', selectedDate);
-          formData.append('comment', comment);
-          formData.append('chat_id', chatId);
-          formData.append('user_name', userName);
-
-          const resp = await fetch(API_URL, { method: 'POST', body: formData });
-          const result = await resp.json();
-
-          if (result.status === 'success') {
-            status.textContent = '✅ Бронь оформлена!';
-            loadBookings();
-            setTimeout(() => {
-              document.getElementById('bookingForm').reset();
-              document.getElementById('bookingForm').classList.add('hidden');
-              document.querySelectorAll('.day-cell').forEach(c => c.classList.remove('selected'));
-              selectedDate = null;
-            }, 2000);
-          } else {
-            status.textContent = '❌ Ошибка: ' + (result.message || 'Не удалось сохранить');
-          }
-        } catch (err) {
-          status.textContent = '❌ Ошибка сети: ' + err.message;
-        } finally {
-          btn.disabled = false;
-        }
-      });
-    </script>
-  </body>
-</html>
