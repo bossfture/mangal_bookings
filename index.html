@@ -4,7 +4,6 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Бронирование мангала</title>
-    <!-- MAX Bridge -->
     <script src="https://st.max.ru/js/max-web-app.js"></script>
     <style>
       :root { color-scheme: dark; }
@@ -15,13 +14,11 @@
         margin: 0; padding: 12px;
       }
       h1 { margin: 8px 0 16px; font-size: 20px; text-align: center; }
-
       .warn {
         background: #3a2f00; border: 1px solid #b58a00; color: #ffd54f;
         padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px;
       }
       .debug { font-size: 11px; color: #777; text-align: center; margin-top: 6px; }
-
       .week-nav {
         display: flex; align-items: center; justify-content: space-between;
         margin-bottom: 4px;
@@ -32,7 +29,6 @@
         font-size: 18px; cursor: pointer;
       }
       .week-label { font-size: 14px; color: #bdbdbd; }
-
       .week-grid {
         display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
       }
@@ -53,9 +49,7 @@
       .day-col.past { opacity: 0.35; }
       .dot { width: 6px; height: 6px; border-radius: 50%; background: #8ab4f8; }
       .spacer { width: 6px; height: 6px; }
-
       .caption { text-align: center; color: #bdbdbd; font-size: 14px; margin: 10px 0 4px; }
-
       .booking-list { margin-top: 10px; }
       .booking-item {
         background: #1e1e1e; border-left: 4px solid #ffb74d;
@@ -69,7 +63,6 @@
         padding: 5px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
       }
       .empty-note { color: #888; font-size: 14px; text-align: center; margin-top: 20px; }
-
       form {
         background: #1e1e1e; padding: 14px; border-radius: 12px; margin-top: 14px;
       }
@@ -122,7 +115,7 @@
     <div class="debug" id="debug"></div>
 
     <script>
-      // === ВСТАВЬТЕ СЮДА URL ВАШЕГО GOOGLE APPS SCRIPT ===
+      // === ВСТАВЬТЕ СЮДА ВАШУ ССЫЛКУ НА GOOGLE APPS SCRIPT ===
       const API_URL = 'https://script.google.com/macros/s/AKfycbxJVBmyQHHdHwr0xQLl3prqPUon_rWTWExyB8IKROvM3xmjSm8Uwcty6qvSHvV8gOh3Lg/exec';
 
       const bridge = window.WebApp || window.Telegram?.WebApp || null;
@@ -154,7 +147,7 @@
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-\${day}`;
+        return y + '-' + m + '-' + day;
       }
 
       function normDate(v) {
@@ -179,14 +172,21 @@
         const end = new Date(base);
         end.setDate(base.getDate() + 6);
         const opt = { day: 'numeric', month: 'long' };
-        return `${base.toLocaleDateString('ru-RU', opt)} – ${end.toLocaleDateString('ru-RU', opt)}`;
+        return base.toLocaleDateString('ru-RU', opt) + ' – ' + end.toLocaleDateString('ru-RU', opt);
       }
 
       // ---------- Загрузка броней ----------
       async function loadBookings() {
-        if (!chatId) return;
+        if (!chatId) {
+          setDebug('Нет chat_id: календарь будет без данных');
+          renderCalendar();
+          showDetails(selectedDate);
+          return;
+        }
+
         try {
-          const resp = await fetch(`${API_URL}?chat_id=${encodeURIComponent(chatId)}&t=\${Date.now()}`);
+          const url = API_URL + '?chat_id=' + encodeURIComponent(chatId) + '&t=' + Date.now();
+          const resp = await fetch(url);
           const data = await resp.json();
 
           if (data.status === 'ok' && Array.isArray(data.data)) {
@@ -194,9 +194,9 @@
               ...b,
               date: normDate(b.date) 
             }));
-            setDebug(`Загружено броней: \${bookings.length}`);
+            setDebug('Загружено броней: ' + bookings.length);
           } else {
-            setDebug('Сервер ответил, но данных нет');
+            setDebug('Сервер ответил, но данных нет: ' + JSON.stringify(data));
           }
         } catch (e) {
           setDebug('Ошибка загрузки: ' + e.message);
@@ -229,7 +229,8 @@
           if (key === selectedDate) col.classList.add('selected');
           if (key < tKey) col.classList.add('past');
           
-          if (bookings.some(b => b.date === key)) col.classList.add('has-booking');
+          const hasBooking = bookings.some(b => b.date === key);
+          if (hasBooking) col.classList.add('has-booking');
 
           const name = document.createElement('span');
           name.className = 'day-name';
@@ -241,9 +242,9 @@
           num.textContent = d.getDate();
           col.appendChild(num);
 
-          const dot = document.createElement('span');
-          dot.className = bookings.some(b => b.date === key) ? 'dot' : 'spacer';
-          col.appendChild(dot);
+          const dotOrSpacer = document.createElement('span');
+          dotOrSpacer.className = hasBooking ? 'dot' : 'spacer';
+          col.appendChild(dotOrSpacer);
 
           col.addEventListener('click', () => selectDay(key));
           grid.appendChild(col);
@@ -280,17 +281,17 @@
           const isOwner = b.user_name === userName;
           const youBadge = isOwner ? '<span class="you">(ваша бронь)</span>' : '';
           const cancelHtml = isOwner
-            ? `<button class="cancel-btn" data-row-id="\${b.row_id}">Отменить</button>`
+            ? '<button class="cancel-btn" data-row-id="' + b.row_id + '">Отменить</button>'
             : '';
 
-          el.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-              <div>
-                <span class="owner">Создал: ${b.user_name}</span>${youBadge}<br>
-                <span class="comment">\${b.comment}</span>
-              </div>
-              \${cancelHtml}
-            </div>`;
+          el.innerHTML = 
+            '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">' +
+            '<div>' +
+            '<span class="owner">Создал: ' + b.user_name + '</span>' + youBadge + '<br>' +
+            '<span class="comment">' + (b.comment || '') + '</span>' +
+            '</div>' +
+            cancelHtml +
+            '</div>';
           list.appendChild(el);
         });
 
