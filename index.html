@@ -128,7 +128,7 @@
 
       let bookings = [];
       let weekOffset = 0;
-      // ДЕнь по умолчанию — сегодня (локальное время пользователя)
+      // День по умолчанию — сегодня (локальное время пользователя)
       let selectedDate = toKey(new Date());
 
       const DAY_NAMES = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
@@ -171,7 +171,7 @@
         return base.toLocaleDateString('ru-RU', opt) + ' – ' + end.toLocaleDateString('ru-RU', opt);
       }
 
-      // === Загрузка броней ===
+      // === Загрузка броней (с кэшем для мгновенного показа) ===
       async function loadBookings() {
         if (!chatId) {
           setDebug('Нет chat_id: календарь работает, но брони не загрузятся');
@@ -179,6 +179,23 @@
           showDetails(selectedDate);
           return;
         }
+
+        const cacheKey = 'bookings_' + chatId;
+
+        // 1. Мгновенный показ из кэша (если он есть)
+        try {
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            bookings = JSON.parse(cached);
+            renderCalendar();
+            showDetails(selectedDate);
+          }
+        } catch (err) {}
+
+        // 2. Показываем, что данные обновляются
+        const status = document.getElementById('status');
+        if (status && !status.textContent) status.textContent = 'Загружаю брони...';
+
         try {
           const url = API_URL + '?chat_id=' + encodeURIComponent(chatId) + '&t=' + Date.now();
           const resp = await fetch(url);
@@ -193,6 +210,8 @@
               user_name: String(b.user_name || ''),
               row_id: String(b.row_id || '')
             }));
+            // 3. Сохраняем свежие данные в кэш
+            try { localStorage.setItem(cacheKey, JSON.stringify(bookings)); } catch (err) {}
             setDebug('Загружено броней: ' + bookings.length);
           } else {
             setDebug('Сервер ответил нестандартно');
@@ -200,6 +219,7 @@
         } catch (e) {
           setDebug('Ошибка загрузки: ' + e.message);
         }
+        if (status) status.textContent = '';
         renderCalendar();
         showDetails(selectedDate);
       }
@@ -317,6 +337,7 @@
 
           if (result.status === 'success') {
             bookings = bookings.filter(b => b.row_id !== rowId);
+            try { localStorage.setItem('bookings_' + chatId, JSON.stringify(bookings)); } catch (err) {}
             renderCalendar();
             showDetails(selectedDate);
           } else {
@@ -369,6 +390,7 @@
               user_name: userName,
               row_id: result.row_id ? String(result.row_id) : null
             });
+            try { localStorage.setItem('bookings_' + chatId, JSON.stringify(bookings)); } catch (err) {}
             renderCalendar();
             showDetails(selectedDate);
 
