@@ -52,6 +52,11 @@
       .booking-item .owner { font-weight: bold; }
       .booking-item .you { color: #8ab4f8; font-weight: bold; margin-left: 6px; }
       .booking-item .comment { color: #bdbdbd; font-size: 12px; }
+      .booking-item .avatar {
+        width: 18px; height: 18px; border-radius: 50%;
+        vertical-align: -4px; margin-left: 4px;
+        object-fit: cover;
+      }
       .cancel-btn {
         background: #e53935; color: white; border: none;
         padding: 5px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
@@ -106,7 +111,7 @@
 
     <script>
       // === ВСТАВЬТЕ СЮДА URL ВАШЕГО GOOGLE APPS SCRIPT ===
-      const API_URL = 'https://script.google.com/macros/s/AKfycbyu6MsWCLk-EGoWFDmUV6Y61Qh_BLK6rmCuUwZvrzxyi_6BgGZNYayDQN67vLZDol5JoA/exec';
+      const API_URL = 'https://script.google.com/macros/s/AKfycbwM0P7xiuXrq4XzlwcCG854TIKUBOQ4sriVVoq4XJ9vdCnnp-IKHR8c9DVOVzuFq6_e1w/exec';
 
       // === Инициализация MAX ===
       const bridge = window.WebApp;
@@ -121,6 +126,7 @@
       const chatId = isGroupChat ? String(chatInfo.id) : null;
       const userName =
         (initDataUnsafe.user && (initDataUnsafe.user.first_name || initDataUnsafe.user.username)) || 'Гость';
+      const userPhoto = (initDataUnsafe.user && initDataUnsafe.user.photo_url) || '';
 
       if (!chatId) {
         document.getElementById('warn').classList.remove('hidden');
@@ -208,7 +214,8 @@
               comment: b.comment || '',
               chat_id: String(b.chat_id || ''),
               user_name: String(b.user_name || ''),
-              row_id: String(b.row_id || '')
+              row_id: String(b.row_id || ''),
+              photo_url: String(b.photo_url || '')
             }));
             // 3. Сохраняем свежие данные в кэш
             try { localStorage.setItem(cacheKey, JSON.stringify(bookings)); } catch (err) {}
@@ -303,10 +310,14 @@
             ? '<button class="cancel-btn" data-row-id="' + b.row_id + '">Отменить</button>'
             : '';
 
+          const avatarHtml = b.photo_url
+            ? '<img class="avatar" src="' + b.photo_url + '" alt="">'
+            : '<span class="avatar" style="display:inline-flex; align-items:center; justify-content:center; background:#333; color:#f2f2f2; font-size:11px;">' + (b.user_name ? b.user_name.charAt(0) : '?') + '</span>';
+
           el.innerHTML =
             '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">' +
             '<div>' +
-            '<span class="owner">Забронил 👤 ' + b.user_name + '</span>' + youBadge + '<br>' +
+            '<span class="owner">Забронил ' + avatarHtml + ' ' + b.user_name + '</span>' + youBadge + '<br>' +
             '<span class="comment">' + b.comment + '</span>' +
             '</div>' +
             cancelHtml +
@@ -377,6 +388,7 @@
           formData.append('comment', comment);
           formData.append('chat_id', chatId);
           formData.append('user_name', userName);
+          formData.append('photo_url', userPhoto);
 
           const resp = await fetch(API_URL, { method: 'POST', body: formData });
           const result = await resp.json();
@@ -388,7 +400,8 @@
               comment: comment,
               chat_id: chatId,
               user_name: userName,
-              row_id: result.row_id ? String(result.row_id) : null
+              row_id: result.row_id ? String(result.row_id) : null,
+              photo_url: userPhoto
             });
             try { localStorage.setItem('bookings_' + chatId, JSON.stringify(bookings)); } catch (err) {}
             renderCalendar();
