@@ -54,7 +54,7 @@
       .booking-item .comment { color: #bdbdbd; font-size: 12px; }
       .booking-item .avatar {
         width: 24px; height: 24px; border-radius: 50%;
-        vertical-align: -4px; margin-left: 8px;
+        vertical-align: -4px; margin-left: 8px; margin-right: 8px;
         object-fit: cover;
       }
       .cancel-btn {
@@ -317,7 +317,7 @@
           el.innerHTML =
             '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">' +
             '<div>' +
-            '<span class="owner">🟢 Забронил ' + avatarHtml + '  ' + b.user_name + '</span>' + youBadge + '<br>' +
+            '<span class="owner">Забронил' + avatarHtml + ' ' + b.user_name + '</span>' + youBadge + '<br>' +
             '<span class="comment">' + b.comment + '</span>' +
             '</div>' +
             cancelHtml +
